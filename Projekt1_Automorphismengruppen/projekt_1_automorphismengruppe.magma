@@ -1,0 +1,604 @@
+SetColumns(250);
+CyclicGraph := function(n)
+return <[i: i in [1..n]],[<i,i,i+1>: i in [1..n-1]] cat [<n,n,1>]>;
+end function;
+
+IsRightUnique := function(u)
+    // u: relation, e.g. u := [<1,3>,<1,4>,<2,3>], or u := {<1,3>,<1,4>,<2,3>}
+    right_unique := true;
+    left_elements := {x[1] : x in u};
+    for y in left_elements do
+        if #{x[2] : x in u | x[1] eq y} ge 2 then
+            right_unique := false;
+            break y;
+        end if;
+    end for;
+    return right_unique;
+end function;
+RelationOnNodesFromPartialMapOnEdges := function(x);
+    // x: partial map on edges from graph G to graph H (G, H not required as data)
+    return {<z[1][1],z[2][1]> : z in x} join {<z[1][3],z[2][3]> : z in x};
+end function;
+CompletionsToMaps := function(D,C,u)
+    // D/C: list of elements in the domain/codomain,
+    // u: right unique relation, e.g.
+    // D := [1,2,3,4]; C := [1,2,3,4,5]; u := {<1,3>, <3,5>};
+    to_be_mapped := [x : x in D | not x in {y[1] : y in u}];
+    list := [u];
+    for i in to_be_mapped do
+        list_new := [];
+        for v in list do
+            for j in C do
+                list_new cat:= [v join {<i,j>}];
+            end for;
+        end for;
+        list := list_new;
+    end for;
+    return list;    
+end function;
+ListGraphMorphisms := function(G,H)
+    list := [[]];
+    for z in G[2] do
+        list_new := [];
+        for w in H[2] do
+            for x in list do
+                x_test := x cat [<z,w>];
+                if IsRightUnique(RelationOnNodesFromPartialMapOnEdges(x_test)) then
+                    list_new cat:= [x_test];
+                end if;
+            end for;
+        end for;
+        list := list_new;
+    end for;
+    list_mor := []; // da sollen die kompletten Morphismen rein
+    for y in list do
+        list_completions_to_maps_on_nodes :=
+        [Sort(SetToSequence(x)) :
+        x in CompletionsToMaps(G[1],H[1],RelationOnNodesFromPartialMapOnEdges(y))];
+        list_mor cat:= [<x,y> : x in list_completions_to_maps_on_nodes];
+    end for;
+    return list_mor;
+end function;
+
+
+
+
+GraphmorphismIsBijective := function(G, H, f)
+    //G Graph, H Graph und f Graphmorphismus
+    //z. B. f:=  <[ <1, 3>, <2, 1>, <3, 2> ], [ <<1, 1, 2>, <3, 3, 1>>, <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>> ]>;
+    //z. B. G := <[ 1, 2, 3 ], [ <1, 1, 2>, <2, 2, 3>, <3, 3, 1> ]>;
+    pointRelation := f[1]; //Abbildung die Punkte von G auf Punkte von H schickt
+    edgeRelation := f[2]; // [ <<1, 1, 2>, <3, 3, 1>>, <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>> ]
+    pointsOfH := H[1]; // [ 1, 2, 3 ]
+    edgesOfH := H[2]; // [ <1, 1, 2>, <2, 2, 3>, <3, 3, 1> ]
+    //Surjektivität von pointRelation
+    if #[x : x in pointsOfH | not x in {y[2] : y in pointRelation}] ge 1 then //punkte aus H die nicht durch f getroffen werden
+        return false;
+    end if;
+    //Injectivität von pointRelation
+    for element in pointsOfH do
+        if #[x : x in pointRelation | x[2] eq element] ge 2 then
+            return false;
+        end if;
+    end for;
+    //Surjektivtät von edgeRelation
+    if #[x: x in edgesOfH | not x in {y[2] : y in edgeRelation}] ge 1 then
+        return false;
+    end if;
+    //Injektivität von edgeRelation
+    for element in edgesOfH do
+        if #[x: x in edgeRelation | x[2] eq element] ge 2 then
+            return false;
+        end if;
+    end for;
+    return true;
+end function;
+
+IsGraphAutomorphism := function(G,f)
+    //f soll schon ein Graphmorphismus sein
+    //G Graph
+    return GraphmorphismIsBijective(G,G,f);
+end function;
+
+GetGraphAutomorphismList := function(G)
+    graphMorphismListOfGG := ListGraphMorphisms(G,G);
+    return [f: f in graphMorphismListOfGG | IsGraphAutomorphism(G,f) eq true];
+end function;
+// https://magma.maths.usyd.edu.au/magma/handbook/text/658#7452
+// SX := Sym(X); G := sub< SX | L >; 
+//S6 := Sym(6); y := S6![1,3,2,5,6,4]; 
+
+GetPermutationListOfAutomorphismsEdgeNumbers := function (f)
+    //f:=  <[ <1, 3>, <2, 1>, <3, 2> ], [ <<1, 1, 2>, <3, 3, 1>>, <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>> ]>;
+    //f:=<[ <1, 3>, <2, 1>, <3, 2> ], [ <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>>,<<1, 1, 2>, <3, 3, 1>> ]>; 
+    permTupels := [<x[1][2],x[2][2]> : x in f[2] ];
+    sortedPermTupels := Sort(permTupels);
+    return [x[2]:x in sortedPermTupels];
+end function;
+
+GetPermutationListsOfAutomorphismsEdgeNumbers := function(G)
+    // Die Kantennummern von G müssen unbedingt mit 1:n durchnummeriert werden, also nicht  [1,17,3] sondern [1,2,3]
+    automorphismList := GetGraphAutomorphismList(G);
+    return [GetPermutationListOfAutomorphismsEdgeNumbers(f) : f in automorphismList];
+end function;
+GetPermutationGroupOfAutomorphismsEdgeNumbers := function(G)
+    L := GetPermutationListsOfAutomorphismsEdgeNumbers(G);
+    n:=#L[1];
+    Sn := Sym(n);
+    permutations := [Sn!p : p in L];
+    permutationGroup := sub<Sn | permutations>;
+    if #permutations eq #permutationGroup then
+        return permutationGroup;
+    else
+        error "Beim Gruppenbilden sind Elemente hinzugekommen";
+    end if;
+end function;
+
+GetEdgeEinbettungsmapAndPermGroup := function(G)
+    graphAutomorphismList := GetGraphAutomorphismList(G);
+    zuordnung := [];
+    permList := [];
+    n:= #graphAutomorphismList[1][2];
+    Sn := Sym(n);
+    for f in graphAutomorphismList do 
+        permTupels_f := [<x[1][2],x[2][2]> : x in f[2] ];
+        sortedPermTupels_f := Sort(permTupels_f);
+        permutation_f := [x[2]:x in sortedPermTupels_f];
+        Append(~permList,permutation_f);
+        Append(~zuordnung,<Sn!permutation_f,f>);
+    end for;
+    permutations := [Sn!p : p in permList];
+    permutationGroup := sub<Sn | permutations>;
+    m := map< permutationGroup -> graphAutomorphismList | zuordnung>;
+    return <m,permutationGroup>;
+end function;
+
+
+GetVerticesEinbettungsmapAndPermGroup := function(G)
+    graphAutomorphismList := GetGraphAutomorphismList(G);
+    zuordnung := [];
+    permList := [];
+    n:= #graphAutomorphismList[1][1];
+    Sn := Sym(n);
+    for f in graphAutomorphismList do 
+        permTupels_f := f[1];
+        sortedPermTupels_f := Sort(permTupels_f);
+        permutation_f := [x[2]:x in sortedPermTupels_f];
+        Append(~permList,permutation_f);
+        Append(~zuordnung,<Sn!permutation_f,f>);
+    end for;
+    permutations := [Sn!p : p in permList];
+    permutationGroup := sub<Sn | permutations>;
+    m := map< permutationGroup -> graphAutomorphismList | zuordnung>;
+    return <m,permutationGroup>;
+end function;
+
+//Ähnliches für die Automorphismusgruppe über den Punkten:
+GetPermutationListOfAutomorphismsVertices := function (f)
+    //z. B. f:=  <[ <1, 3>, <2, 1>, <3, 2> ], [ <<1, 1, 2>, <3, 3, 1>>, <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>> ]>;
+    //f:=<[ <1, 3>, <2, 1>, <3, 2> ], [ <<2, 2, 3>, <1, 1, 2>>, <<3, 3, 1>, <2, 2, 3>>,<<1, 1, 2>, <3, 3, 1>> ]>; 
+    permTupels := f[1];
+    sortedPermTupels := Sort(permTupels);
+    return [x[2]:x in sortedPermTupels];
+end function;
+GetPermutationListsOfAutomorphismsVertices := function(G)
+// Die Punkte von G müssen unbedingt mit 1:n durchnummeriert werden, also nicht  [1,17,3] sondern [1,2,3]
+    automorphismList := GetGraphAutomorphismList(G);
+    return [GetPermutationListOfAutomorphismsVertices(f) : f in automorphismList];
+end function;
+GetPermutationGroupOfAutomorphismsVertices := function(G)
+    L := GetPermutationListsOfAutomorphismsVertices(G);
+    n:=#L[1];
+    Sn := Sym(n);
+    permutations := [Sn!p : p in L];
+    permutationGroup := sub<Sn | permutations>;
+    if #permutations eq #permutationGroup then
+        return permutationGroup;
+    else
+        error "Beim Gruppenbilden sind Elemente hinzugekommen";
+    end if;
+end function;
+
+
+ExistsSymmetricGroupOfOrder := function(n)
+    k:=1;
+    kFaculty:=1;
+    while (kFaculty le n) do
+        if kFaculty eq n then
+            return <true,k>;
+        else
+            k:=k+1;
+            kFaculty:=kFaculty*k;
+        end if;
+    end while;
+    return <false,k>;
+end function;
+
+
+IsIsomorphicToSymmetricGroup :=function(G)
+    group := GetPermutationGroupOfAutomorphismsEdgeNumbers(G);
+    x:=ExistsSymmetricGroupOfOrder(#group);
+    if x[1] eq false then
+        return false;
+    else return IsIsomorphic(group,SymmetricGroup(x[2]));
+    end if;
+end function;
+
+
+IsIsomorphicToCyclicGroup := function(G)
+    group := GetPermutationGroupOfAutomorphismsEdgeNumbers(G);
+    return IsIsomorphic(group,CyclicGroup(#group));
+end function;
+
+
+IsIsomorphicToSymmetricGroupORCyclicGroup := function(G)
+    group :=GetPermutationGroupOfAutomorphismsEdgeNumbers(G);    
+    return (IsIsomorphicToSymmetricGroup(G) or IsIsomorphic(group,CyclicGroup(#group)));
+end function;
+
+
+IsIsomorphicToSymmetricORCyclicORK4 := function(G)
+    group :=GetPermutationGroupOfAutomorphismsEdgeNumbers(G);
+    order := #group;
+    if order lt 5 then
+        return true;
+    else
+        x:=ExistsSymmetricGroupOfOrder(#group);
+        if x[1] eq false then //group ist nicht isomorph zu symm Grp
+            return IsIsomorphic(group,CyclicGroup(#group));
+        else 
+            return IsIsomorphic(group,SymmetricGroup(x[2])) or IsIsomorphic(group,CyclicGroup(#group));
+        end if;
+    end if;
+end function;
+
+
+HasIsolatedPoints := function(S,n)
+    //S = teilmenge der Menge der 2-tupel-kanten zu n Punkten
+    startPunktMenge := {x[1]:x in S};
+    endPunktMenge := {x[2]:x in S};
+    for v in [1..n] do
+        if not v in startPunktMenge and not v in endPunktMenge then
+            return true;
+        end if;
+    end for;
+    return false;
+end function;
+
+
+
+GenerateEdgeTupleList := function(n)
+//Erstellt Liste aller (tupel-)Kanten zu den Punkten [1..n]
+//für n = 3, return [ <1, 1>, <1, 2>, <1, 3>, <2, 1>, <2, 2>, <2, 3>, <3, 1>, <3, 2>, <3, 3> ]
+    edgeTupleList :=[];
+    for i in [1..n] do
+        for j in [1..n] do
+            Append(~edgeTupleList,<i,j>);
+        end for;
+    end for;
+    return edgeTupleList;
+end function;
+
+
+
+GenerateGraphs := function(n,lowerbound,upperbound)//Es werden die Graphen mit Nummerierung lowerbound bis upperbound generiert
+//lowerbound muss >=1
+//upperbound muss <= 2^(n^2)-1
+//Geschwindigkeit ist ca. 80_000 pro stunde
+//returns all (non-isolated)Graphs with n Points, with Automorphismgroups that are interesting 
+    graphList := [];
+    V := [i:i in [1..n]];
+    edgeTupleList := GenerateEdgeTupleList(n); //enthält n^2 viele Tuple-kanten
+    mindestAnzahl := Floor(n/2); //ein Graph mit weniger Kanten, muss isolierte Punkte haben
+    for i in [lowerbound..upperbound] do // ein i für jedes Element (außer leer) der Potenzmenge von edgeTupleList
+        auswahlListe := Intseq(i,2); //liefert zu i eine Liste mit der umgedrehten Binärdarstellung,z.B. 10 -> [0,1,0,1]
+        //so wird auswahlListe in der Schleife durchgezählt von [1],[0,1],[1,1],[0,0,1],[1,0,1],...bis [1,1,1,1,1...,1]
+        Si := {edgeTupleList[i]:i in [1..(#auswahlListe)] | auswahlListe[i] eq 1}; //Subset no i von edgeTupleList
+        if not (#Si lt mindestAnzahl) then 
+            if HasIsolatedPoints(Si,n) eq false then
+                counter:=1;
+                edgesList:=[];
+                for tuple in Si do
+                    triple := <tuple[1],counter,tuple[2]>;
+                    counter := counter + 1;
+                    Append(~edgesList,triple);
+                end for;
+                graph := <V,edgesList>;
+                if not IsIsomorphicToSymmetricORCyclicORK4(graph) then
+                    Append(~graphList,graph);
+                end if;
+            end if;
+        end if;
+        print(IntegerToString(i) cat " von " cat IntegerToString(upperbound) cat " bzw "cat IntegerToString(2^(n^2)-1) cat " Graphen ueberprueft. " cat IntegerToString(#graphList) cat " nichttriviale bisher gesammelt.");
+    end for;
+    return graphList;
+end function;
+
+
+SortGraphs := function(graphList)
+    listOfGraphLists :=[[graphList[1]]];
+    counter :=2;
+    len := #graphList;
+    for i in [2..#graphList] do
+        G := graphList[i];
+        group := GetPermutationGroupOfAutomorphismsEdgeNumbers(G);
+        foundIsomorphic := false;
+        for j in [1..#listOfGraphLists] do
+            H := listOfGraphLists[j][1];
+            group2 := GetPermutationGroupOfAutomorphismsEdgeNumbers(H);
+            if IsIsomorphic(group,group2) then
+                foundIsomorphic := true;
+                Append(~listOfGraphLists[j],G);
+                break;
+            end if;
+        end for;
+        if not foundIsomorphic then
+            Append(~listOfGraphLists,[G]);
+        end if;
+        print(IntegerToString(counter) cat " von " cat IntegerToString(len) cat " Graphen sortiert." );
+        counter := counter + 1;
+    end for;
+    return listOfGraphLists;
+end function;
+
+
+MergeSortedGraphs := function(sortedListofGraphLists1, sortedListofGraphLists2)
+//sortiert liste1 in liste2 ein, geht davon aus dass liste1, liste2 aus verschiedenen Graphen bestehen
+    for i in [1..#sortedListofGraphLists1] do
+        group1 := GetPermutationGroupOfAutomorphismsEdgeNumbers(sortedListofGraphLists1[i][1]);
+        foundIsomorphic := false;
+        for j in [1..#sortedListofGraphLists2] do 
+            group2 := GetPermutationGroupOfAutomorphismsEdgeNumbers(sortedListofGraphLists2[j][1]);
+            if IsIsomorphic(group1,group2) then
+                foundIsomorphic := true;
+                for x in sortedListofGraphLists1[i] do
+                    Append(~sortedListofGraphLists2[j],x);
+                end for;
+                break;
+            end if;
+        end for;
+        if not foundIsomorphic then
+            Append(~sortedListofGraphLists2,sortedListofGraphLists1[i]);
+        end if;
+    end for;
+return sortedListofGraphLists2;
+end function;
+
+
+SortGroups := function(groupList)
+    listOfGroupLists :=[[groupList[1]]];
+    counter :=2;
+    len := #groupList;
+    for i in [2..#groupList] do
+        group := groupList[i];
+        foundIsomorphic := false;
+        for j in [1..#listOfGroupLists] do
+            group2 := listOfGroupLists[j][1];
+            if IsIsomorphic(group,group2) then
+                foundIsomorphic := true;
+                Append(~listOfGroupLists[j],group);
+                break;
+            end if;
+        end for;
+        if not foundIsomorphic then
+            Append(~listOfGroupLists,[group]);
+        end if;
+        //print(IntegerToString(counter) cat " von " cat IntegerToString(len) cat " Gruppen sortiert." );
+        counter := counter + 1;
+    end for;
+    return listOfGroupLists;
+end function;
+
+
+MergeSortedGroups := function(sortedListofGroupLists1, sortedListofGroupLists2)
+//sortiert liste1 in liste2 ein. Falls liste1, liste2 nicht aus verschiedenen Gruppen bestehen, werden dopplungen derselben Gruppe möglich sein (da Listen)
+    for i in [1..#sortedListofGroupLists1] do
+        group1 :=sortedListofGroupLists1[i][1];
+        foundIsomorphic := false;
+        for j in [1..#sortedListofGroupLists2] do 
+            group2 := sortedListofGroupLists2[j][1];
+            if IsIsomorphic(group1,group2) then
+                foundIsomorphic := true;
+                for x in sortedListofGroupLists1[i] do
+                    Append(~sortedListofGroupLists2[j],x);
+                end for;
+                break;
+            end if;
+        end for;
+        if not foundIsomorphic then
+            Append(~sortedListofGroupLists2,sortedListofGroupLists1[i]);
+        end if;
+    end for;
+return sortedListofGroupLists2;
+end function;
+
+
+GetListOfStabilizers := function(group,n)
+//group soll auf {1,..,n} operieren
+    stabilizerList := [];
+    for i in [1..n] do
+        Append(~stabilizerList,Stabilizer(group,i));
+    end for;
+    return stabilizerList;
+end function;
+
+
+GetBothListsOfStabilizers := function(G)
+    edgeGroup := GetPermutationGroupOfAutomorphismsEdgeNumbers(G);
+    verticesGroup := GetPermutationGroupOfAutomorphismsVertices(G);
+    edgesCount := #G[2];
+    verticesCount := #G[1];
+    return <GetListOfStabilizers(edgeGroup,edgesCount),GetListOfStabilizers(verticesGroup,verticesCount)>;
+end function;
+
+
+SortedEdgeStabilizerReplacedWithGroupName :=function(sortedEdgesStabilizers)
+    sortedblabla := [];
+    for i in [1..#sortedEdgesStabilizers] do
+        name := GroupName(sortedEdgesStabilizers[i][1]);
+        Append(~sortedblabla,<name,#sortedEdgesStabilizers[i]>);
+    end for;
+    return sortedblabla;
+end function;
+
+
+StabilizerCountOfEdgesAndVerticesGroupsIsEqual := function(G)
+    stabilizers := GetBothListsOfStabilizers(G);
+    sortedEdgesStabilizers := SortGroups(stabilizers[1]);
+    sortedVerticesStabilizers := SortGroups(stabilizers[2]);
+    edgesStabilizerCount := #sortedEdgesStabilizers;
+    verticesStabilizerCount := #sortedVerticesStabilizers;
+    return edgesStabilizerCount eq verticesStabilizerCount;
+end function;
+
+
+StabilizersOfEdgesAndVerticesGroupsAreEqual := function(G)
+    stabilizers := GetBothListsOfStabilizers(G);
+    sortedEdgesStabilizers := SortGroups(stabilizers[1]);
+    sortedVerticesStabilizers := SortGroups(stabilizers[2]);
+    if #sortedEdgesStabilizers eq #sortedVerticesStabilizers then
+        s:=MergeSortedGroups(sortedEdgesStabilizers,sortedVerticesStabilizers);
+        if #s eq #sortedEdgesStabilizers then
+            return true;
+        else
+            return false;
+        end if;
+    else 
+        return false;
+    end if;
+end function;
+
+
+
+StabilizerIsTheSame := function(EdgeStab, PointStab,Edgemap,Pointmap)
+//EdgeStab und PointStab müssen Mengen sein
+    if #EdgeStab eq #PointStab then 
+        if {Edgemap(edge) : edge in EdgeStab} eq {Pointmap(point) : point in PointStab} then
+            return true;
+        else
+            return false;
+        end if;
+    else
+        return false;
+    end if;
+end function;
+
+GraphHasTheSameStabilizersInAutPrintingStabilizers := function(G)
+    mapAndEdgeGroup := GetEdgeEinbettungsmapAndPermGroup(G);
+    mapAndVerticesGroup := GetVerticesEinbettungsmapAndPermGroup(G);
+    Edgemap := mapAndEdgeGroup[1];
+    Pointmap := mapAndVerticesGroup[1];
+    EdgeGroup:= mapAndEdgeGroup[2];
+    PointGroup := mapAndVerticesGroup[2];
+    EdgesCount := #G[2];
+    PointsCount := #G[1];
+    EdgeStabilizers := GetListOfStabilizers(EdgeGroup,EdgesCount);
+    PointStabilizers := GetListOfStabilizers(PointGroup,PointsCount);
+    EdgeStabilizerSet := Set(EdgeStabilizers);
+    PointStabilizerSet := Set(PointStabilizers);
+    print("KantenStabilisatoren");
+    for edgeStabilizer in EdgeStabilizers do
+        print({Edgemap(edge) : edge in edgeStabilizer});
+        print("-------------------------------------------");
+    end for;
+    print("-------------------------------------------");
+    print("-------------------------------------------");
+    print("-------------------------------------------");
+    print("PunkteStabilisatoren");
+    for pointStabilizer in PointStabilizers do
+        print({Pointmap(point) : point in pointStabilizer});
+        print("-------------------------------------------");
+    end for;
+    if #EdgeStabilizerSet eq #PointStabilizerSet then
+        for edgeStabilizer in EdgeStabilizerSet do
+            foundSame := false;
+            for pointStabilizer in PointStabilizerSet do
+                if StabilizerIsTheSame(edgeStabilizer,pointStabilizer,Edgemap,Pointmap) then
+                    foundSame := true;
+                end if;
+            end for;
+            if foundSame eq false then 
+                return false;
+            end if;
+        end for;
+    return true;
+    else
+        return false;
+    end if;
+end function;
+
+GraphHasTheSameStabilizersInAut := function(G)
+    mapAndEdgeGroup := GetEdgeEinbettungsmapAndPermGroup(G);
+    mapAndVerticesGroup := GetVerticesEinbettungsmapAndPermGroup(G);
+    Edgemap := mapAndEdgeGroup[1];
+    Pointmap := mapAndVerticesGroup[1];
+    EdgeGroup:= mapAndEdgeGroup[2];
+    PointGroup := mapAndVerticesGroup[2];
+    EdgesCount := #G[2];
+    PointsCount := #G[1];
+    EdgeStabilizers := GetListOfStabilizers(EdgeGroup,EdgesCount);
+    PointStabilizers := GetListOfStabilizers(PointGroup,PointsCount);
+    EdgeStabilizerSet := Set(EdgeStabilizers);
+    PointStabilizerSet := Set(PointStabilizers);
+    if #EdgeStabilizerSet eq #PointStabilizerSet then
+        for edgeStabilizer in EdgeStabilizerSet do
+            foundSame := false;
+            for pointStabilizer in PointStabilizerSet do
+                if StabilizerIsTheSame(edgeStabilizer,pointStabilizer,Edgemap,Pointmap) then
+                    foundSame := true;
+                end if;
+            end for;
+            if foundSame eq false then 
+                return false;
+            end if;
+        end for;
+    return true;
+    else
+        return false;
+    end if;
+end function;
+
+
+ClassifyIsomorphicGraphsByStabilizers := function(graphList)
+//graphList soll Liste von Graphen mit Isomorphen Automorphismengruppen sein.
+//Sammle die Graphen sodass die beiden Operationen (bis auf Isomorphie) gleiche Stabilisatoren liefern, bzw die die das nicht tun
+    graphsWithEqualStabilizers:=[];
+    graphsWithEqualStabilizerCount :=[];
+    graphsWithDifferenzStabilizerCount:=[];
+    counter := 1;
+    len := #graphList;
+    for G in graphList do
+        stabilizers := GetBothListsOfStabilizers(G);
+        sortedEdgesStabilizers := SortGroups(stabilizers[1]);
+        sortedVerticesStabilizers := SortGroups(stabilizers[2]);
+        if not (#sortedEdgesStabilizers eq #sortedVerticesStabilizers) then
+            Append(~graphsWithDifferenzStabilizerCount,G);
+        else
+            s:=MergeSortedGroups(sortedEdgesStabilizers,sortedVerticesStabilizers);
+            if #s eq #sortedEdgesStabilizers then
+                Append(~graphsWithEqualStabilizers,G);
+            else 
+                Append(~graphsWithEqualStabilizerCount,G);
+            end if;
+        end if;
+    print(IntegerToString(counter) cat " von " cat IntegerToString(len) cat " Graphen klassifiziert." );
+    counter := counter + 1;
+    end for;
+    return [graphsWithEqualStabilizers,graphsWithEqualStabilizerCount,graphsWithDifferenzStabilizerCount];
+end function;
+
+ClassifySortedGraphList := function(sortedListOfGraphLists)
+//erwartet als Input den Output von sortGraphs#
+    ClassifiedList := [];
+    counter := 1;
+    len := #sortedListOfGraphLists;
+    //sortedListOfGraphLists[1] ist eine Liste von Isomorphen Graphen. Die Klassifizierung dieser Liste wird das erste Element von ClassifiedList. Genauso weiter mit sorted...[2].
+    for graphList in sortedListOfGraphLists do
+        Append(~ClassifiedList,ClassifyIsomorphicGraphsByStabilizers(graphList));
+        print(IntegerToString(counter) cat " von " cat IntegerToString(len) cat " GraphenListen klassifiziert." );
+        counter := counter + 1;
+    end for;
+    return ClassifiedList;
+end function;
+
+
