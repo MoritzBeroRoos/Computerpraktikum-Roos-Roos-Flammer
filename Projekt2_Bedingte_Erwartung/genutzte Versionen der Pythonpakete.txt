@@ -1,0 +1,5 @@
+Das Projekt wurde unter folgenden Versionen getestet:
+python version 3.9.7
+sympy version 1.9
+matplotlib version 3.5.0
+numpy version 1.20.3
